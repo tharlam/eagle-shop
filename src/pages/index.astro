@@ -1,11 +1,181 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
+// @ts-nocheck
+// src/pages/index.astro
+import clientPromise from '../lib/mongodb';
+import { ObjectId } from 'mongodb';
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+// --- SERVER SIDE ---
+// This runs on the server before the page is sent to the browser
+let users = [];
+let error = null;
+
+try {
+    const client = await clientPromise;
+    const db = client.db('test');
+    // Fetch users (newest first)
+    // We convert _id to string just to be safe for the frontend
+    const docs = await db.collection('users').find({}).sort({ createdAt: -1 }).toArray();
+    users = docs.map(doc => ({
+        ...doc,
+        _id: doc._id.toString()
+    }));
+} catch (e) {
+    error = e.message;
+}
 ---
 
-<Layout>
-	<Welcome />
-</Layout>
+<!-- --- CLIENT SIDE --- -->
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>User Manager</title>
+    <style>
+        /* CSS STYLES */
+        body { font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+        
+        /* Form Card Style */
+        .card { 
+            border: 1px solid #ddd; 
+            padding: 20px; 
+            border-radius: 8px; 
+            margin-bottom: 20px;
+            background: #fafafa;
+        }
+        
+        /* Input Fields */
+        input { 
+            display: block; 
+            width: 100%; 
+            padding: 10px; 
+            margin-bottom: 10px; 
+            box-sizing: border-box; 
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        /* Add Button */
+        .add-btn { 
+            background: #28a745; 
+            color: white; 
+            padding: 10px 20px; 
+            border: none; 
+            border-radius: 4px;
+            cursor: pointer; 
+            width: 100%;
+        }
+        .add-btn:hover { background: #218838; }
+
+        /* Delete Button */
+        .delete-btn { 
+            background: #dc3545; 
+            color: white; 
+            border: none; 
+            padding: 5px 12px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 14px;
+        }
+        .delete-btn:hover { background: #c82333; }
+
+        /* List Items */
+        .user-item { 
+            display: flex;             /* Makes the text and button sit side-by-side */
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 1px solid #eee; 
+            padding: 15px 0; 
+        }
+    </style>
+</head>
+<body>
+
+    <h1>User Management System</h1>
+
+    <!-- 1. THE FORM (ADD USER) -->
+    <div class="card">
+        <h3>Add New User</h3>
+        <form id="userForm">
+            <label>Name</label>
+            <input type="text" name="name" required placeholder="John Doe" />
+            
+            <label>Email</label>
+            <input type="email" name="email" required placeholder="john@example.com" />
+            
+            <button type="submit" class="add-btn">Add User</button>
+        </form>
+    </div>
+
+    <!-- 2. THE LIST (DISPLAY USERS) -->
+    <div>
+        <h3>Current Users ({users.length})</h3>
+        
+        {error && <p style="color: red">Error: {error}</p>}
+
+        {users.length === 0 ? (
+            <p style="color: gray">No users found.</p>
+        ) : (
+            <ul>
+                {users.map((user) => (
+                    <li class="user-item">
+                        <div>
+                            <strong>{user.name}</strong> <br/>
+                            <small style="color: #666">{user.email}</small>
+                        </div>
+                        <!-- DELETE BUTTON -->
+                        <!-- We store the ID in 'data-id' so JavaScript can find it -->
+                        <button class="delete-btn" data-id={user._id}>Delete</button>
+                    </li>
+                ))}
+            </ul>
+        )}
+    </div>
+
+    <!-- 3. JAVASCRIPT LOGIC -->
+    <script>
+        // --- LOGIC TO ADD USER ---
+        const form = document.getElementById('userForm');
+
+        // We check "instanceof HTMLFormElement" to prove to VS Code that it exists
+        if (form instanceof HTMLFormElement) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const formData = new FormData(form);
+                const data = {
+                    name: formData.get('name'),
+                    email: formData.get('email')
+                };
+
+                await fetch('/api/users', {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                window.location.reload(); 
+            });
+        }
+
+        // --- LOGIC TO DELETE USER ---
+        const deleteButtons = document.querySelectorAll('.delete-btn');
+
+        deleteButtons.forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const btn = e.currentTarget;
+
+                // We check "instanceof HTMLButtonElement" to prove it has attributes
+                if (btn instanceof HTMLButtonElement) {
+                    const id = btn.getAttribute('data-id'); 
+
+                    if(!confirm("Delete this user?")) return;
+
+                    await fetch('/api/users', {
+                        method: 'DELETE',
+                        body: JSON.stringify({ id: id })
+                    });
+                    window.location.reload(); 
+                }
+            });
+        });
+    </script>
+</body>
+</html>
