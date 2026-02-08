@@ -2,6 +2,6 @@ import { defineConfig } from 'astro/config';
 import vercel from '@astrojs/vercel/serverless';
 
 export default defineConfig({
-  output: 'server',
-  adapter: vercel(),
+  output: 'server', // This enables Server-Side Rendering (SSR)
+  adapter: vercel(), // This connects your project to Vercel's serverless brain
 });
